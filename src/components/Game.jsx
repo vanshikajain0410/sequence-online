@@ -3,24 +3,20 @@ import { createShuffledDeck } from "../constants/deck";
 import Board from "./Board";
 import { BOARD_LAYOUT } from "../constants/board";
 
-const PLAYERS = [
-  { id: "p1", name: "Player 1", colour: "blue" },
-  { id: "p2", name: "Player 2", colour: "green" },
-];
 const HAND_SIZE = 7; // 2 players get 7 cards each
 
-function dealHands(deck, numPlayers, handSize) {
+function dealHands(deck, numPlayers, handSize, players) {
   const hands = {};
   const remaining = [...deck];
-  for (const player of PLAYERS.slice(0, numPlayers)) {
+  for (const player of players.slice(0, numPlayers)) {
     hands[player.id] = remaining.splice(0, handSize);
   }
   return { hands, remaining };
 }
 
-function initGameState() {
+function initGameState(players) {
   const deck = createShuffledDeck();
-  const { hands, remaining } = dealHands(deck, 2, HAND_SIZE);
+  const { hands, remaining } = dealHands(deck, players.length, HAND_SIZE, players);
   return {
     deck: remaining,
     hands,
@@ -121,17 +117,17 @@ function detectSequences(board) {
   return sequences;
 }
 
-function Game() {
-  const [gameState, setGameState] = useState(initGameState);
+function Game({ players }) {
+  const [gameState, setGameState] = useState(() => initGameState(players));
 
-  const currentPlayer = PLAYERS.find((p) => p.id === gameState.currentPlayerId);
+  const currentPlayer = players.find((p) => p.id === gameState.currentPlayerId);
 
   const highlightedCells = gameState.selectedCard
     ? getHighlightedCells(
-        gameState.selectedCard.card,
-        gameState.board,
-        currentPlayer.colour,
-      )
+      gameState.selectedCard.card,
+      gameState.board,
+      currentPlayer.colour,
+    )
     : new Set();
 
   function handleCardSelect(cardObj, playerId) {
@@ -169,24 +165,24 @@ function Game() {
     if (drawnCard) newHand.push(drawnCard);
 
     // Switch turn
-    const currentIndex = PLAYERS.findIndex((p) => p.id === currentPlayerId);
-    const nextPlayer = PLAYERS[(currentIndex + 1) % PLAYERS.length];
+    const currentIndex = players.findIndex((p) => p.id === currentPlayerId);
+    const nextPlayer = players[(currentIndex + 1) % players.length];
 
     const newSequences = detectSequences(newBoard);
 
-    // Check win: 2 players need 2 sequences each
-    const seqByColour = {};
-    for (const player of PLAYERS) {
-      seqByColour[player.colour] = newSequences.filter((seq) =>
-        seq.every(
-          ([r, c]) =>
-            BOARD_LAYOUT[r][c] === "JOKER" || newBoard[r][c] === player.colour,
-        ),
-      ).length;
-    }
-    const winner = PLAYERS.find((p) => seqByColour[p.colour] >= 2);
-    if (winner) {
-      setTimeout(() => alert(`🎉 ${winner.name} wins!`), 100);
+    // Evaluate win layout dynamically using the fresh structural sequences data
+    const blueSeqCount = newSequences.filter(seq =>
+      seq.every(([r, c]) => BOARD_LAYOUT[r][c] === "JOKER" || newBoard[r][c] === "blue")
+    ).length;
+
+    const greenSeqCount = newSequences.filter(seq =>
+      seq.every(([r, c]) => BOARD_LAYOUT[r][c] === "JOKER" || newBoard[r][c] === "green")
+    ).length;
+
+    if (blueSeqCount >= 2) {
+      setTimeout(() => alert("🎉 Player 1 (Blue) Wins!"), 100);
+    } else if (greenSeqCount >= 2) {
+      setTimeout(() => alert("🎉 Player 2 (Green) Wins!"), 100);
     }
 
     setGameState((prev) => ({
@@ -245,7 +241,7 @@ function Game() {
       </div>
 
       <div className="mt-6 w-full max-w-2xl flex flex-col gap-4">
-        {PLAYERS.map((player) => (
+        {players.map((player) => (
           <div key={player.id}>
             <p className="text-stone-400 text-xs uppercase tracking-widest mb-2">
               {player.name}{" "}
@@ -288,8 +284,11 @@ function Game() {
                           );
                         return isDead ? (
                           <div
-                            className="text-yellow-400 text-xs text-center mt-1 cursor-pointer"
-                            onClick={() => handleDeadDiscard(cardObj)}
+                            className="text-yellow-400 text-xs text-center mt-1 cursor-pointer bg-stone-800 rounded px-1"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Stops parent container click selection from firing
+                              handleDeadDiscard(cardObj);
+                            }}
                           >
                             discard
                           </div>
